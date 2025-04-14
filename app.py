@@ -1,33 +1,35 @@
+# app.py
 import streamlit as st
 import yfinance as yf
-import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
-from datetime import datetime, timedelta
+import numpy as np
+import pandas as pd
 
-st.title("AI株価予測アプリ（1日先）")
+st.title("株価予想アプリ")
 
-ticker = st.text_input("銘柄コードを入力（例: AAPL, TSLA）", "AAPL")
+ticker = st.text_input("銘柄コード（例: 7203.T）", "7203.T")
+days = st.slider("過去データ（日数）", 30, 365, 90)
+future_days = st.slider("予測する未来日数", 7, 60, 30)
 
-@st.cache_data
-def load_data(ticker):
-    end = datetime.now()
-    start = end - timedelta(days=60)
-    data = yf.download(ticker, start=start, end=end)
-    data = data[["Close"]].dropna()
-    data["Days"] = range(len(data))
-    return data
+if st.button("予測する"):
+    df = yf.download(ticker, period=f"{days}d")
+    df = df.reset_index()
+    df["Date_ordinal"] = df["Date"].map(pd.Timestamp.toordinal)
 
-if ticker:
-    try:
-        df = load_data(ticker)
-        X = df[["Days"]]
-        y = df["Close"]
-        model = LinearRegression()
-        model.fit(X, y)
-        next_day = [[len(df)]]
-        pred = model.predict(next_day)[0]
-        st.line_chart(df["Close"])
-        st.success(f"{ticker} の翌日予測株価: ${pred:.2f}")
-    except:
-        st.error("データ取得に失敗したよ…コードを確認してね。")
+    X = df["Date_ordinal"].values.reshape(-1, 1)
+    y = df["Close"].values
+    model = LinearRegression().fit(X, y)
 
+    future_dates = [df["Date"].max() + pd.Timedelta(days=i) for i in range(1, future_days+1)]
+    future_ordinals = np.array([d.toordinal() for d in future_dates]).reshape(-1, 1)
+    preds = model.predict(future_ordinals)
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(df["Date"], y, label="過去の株価")
+    plt.plot(future_dates, preds, label="予測", linestyle="--")
+    plt.xlabel("日付")
+    plt.ylabel("株価")
+    plt.title(f"{ticker} の株価予想")
+    plt.legend()
+    st.pyplot(plt)
